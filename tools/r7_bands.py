@@ -38,7 +38,7 @@ BANDNAME  = {1: 'X', 2: 'K', 3: 'Ka(lo-mix)', 4: 'Ka(hi-mix)',
              6: 'Ka(narrow)', 7: 'K(alt)', 8: 'spot/instant'}
 
 def get_dsp(buf):
-    for f in parse(buf):
+    for f in parse(buf, require_model=7):
         if f['name'] == 'dsp_nu':
             return f['offset'], f['length'], f['key']
     raise SystemExit("dsp_nu not found")

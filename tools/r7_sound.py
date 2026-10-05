@@ -60,7 +60,7 @@ IMA_IDX  = [-1,-1,-1,-1,2,4,6,8]
 
 
 def sound_span(buf):
-    for f in parse(buf):
+    for f in parse(buf, require_model=7):
         if f['name'] == 'sound_dbnu':
             return f['offset'], f['length']
     raise SystemExit("sound_dbnu not found")

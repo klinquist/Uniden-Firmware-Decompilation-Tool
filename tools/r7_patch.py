@@ -20,7 +20,7 @@ import sys
 from r7_unpack import decode_old_model, encode_old_model, parse
 
 def get_section(buf, name):
-    for f in parse(buf):
+    for f in parse(buf, require_model=7):
         if f['name'] == name:
             return f['offset'], f['length'], f['key']
     raise SystemExit(f"section {name} not found")

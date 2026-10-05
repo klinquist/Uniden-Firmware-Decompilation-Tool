@@ -45,7 +45,7 @@ KEY = 210  # US / LRDB
 def load_records(fw):
     buf = open(fw, 'rb').read()
     bo = bl = None
-    for f in parse(buf):
+    for f in parse(buf, require_model=7):
         if f['name'].startswith('GPSD') and f['term'] == 'LRDB':
             bo, bl = f['offset'], f['length']
     if bo is None:

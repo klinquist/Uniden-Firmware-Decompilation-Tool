@@ -1,15 +1,29 @@
-# Uniden R7 Firmware Toolkit
+# Uniden R-series Firmware Toolkit
 
 Open tools for **decoding, editing, and re-packing Uniden R7 radar-detector firmware** — so you
 can customize your *own* detector: edit menu/display text, swap the boot logo and other bitmaps,
 build a custom GPS/red-light-camera database, and even edit the idle "Scan" animation.
 
-Every tool round-trips **byte-for-byte** (decode → re-encode reproduces the original firmware
-exactly), so any change you make is precisely and only your change.
+The R7 editing tools round-trip **byte-for-byte** (decode → re-encode reproduces the
+original firmware). R4W/R8W support preserves opaque components and validates
+unchanged extraction/repacking; controller-code editing is not yet supported.
 
-> Reverse-engineered from firmware **`R7_v153.150.127`**. The *methods* are general to the Uniden
-> R-series; the *specific offsets* baked into the tools are for that version (see
-> [Firmware versions](#firmware-versions)).
+> R7 editing was reverse-engineered from **`R7_v153.150.127`**. Its decoding keys and
+> hard-coded offsets do not apply to R4W/R8W. See [Firmware versions](#firmware-versions).
+
+## R4W / R8W
+
+This fork adds model-aware inspection, raw component extraction, ESP32-C3 wireless
+image validation, and byte-exact reproduction for **R4W v127.128.123** and
+**R8W v142.113.127**. Main/DSP/GPS code and AES camera databases remain opaque.
+The R7 editors reject these models. See [the support guide](docs/R4W_R8W.md)
+for component maps, verified findings, limitations and tests.
+
+```sh
+python3 tools/rseries.py inspect /path/to/R8W_v142.113.127_db260702.bin
+python3 tools/rseries.py extract /path/to/R4W_v127.128.123_db260702.bin decoded/r4w
+python3 tools/rseries.py repack decoded/r4w /tmp/r4w-reproduced.bin
+```
 
 ---
 
@@ -41,11 +55,11 @@ This project is unaffiliated with and unendorsed by Uniden.
 | **GPS / camera database** (speed, red-light, custom points) | `r7_gpsdb.py` | [docs/GPS_DATABASE.md](docs/GPS_DATABASE.md) |
 | **"Scan" idle animation** (the sweeping bar) | `r7_scan.py` | [docs/SCAN_ANIMATION.md](docs/SCAN_ANIMATION.md) |
 | **RF band frequencies** (move X/K/Ka detection windows) | `r7_bands.py` | [docs/BAND_FILTERING.md](docs/BAND_FILTERING.md) |
-| **Voice / alert audio** (8-bit PCM clips) | `r7_sound.py` | [docs/SOUND.md](docs/SOUND.md) |
-| **Inspect / unpack the container** | `r7_unpack.py` | [docs/FORMAT.md](docs/FORMAT.md) |
+| **Voice / alert audio** (ISD3800, best-effort WAV) | `r7_sound.py` | [docs/SOUND.md](docs/SOUND.md) |
+| **Inspect / unpack the container** | `r7_unpack.py`, `rseries.py` | [docs/FORMAT.md](docs/FORMAT.md) |
 | **DSP serial messages** (band enables, Ka-segment mask — runtime, no reflash) | `r7_ipc.py` | [docs/DSP_PROTOCOL.md](docs/DSP_PROTOCOL.md) |
 
-Raw byte/patch edits of any section are possible via `r7_patch.py patch`.
+Raw byte/patch edits of decoded R7 sections are possible via `r7_patch.py patch`.
 
 **Want the complete picture?** [docs/WHAT_YOU_CAN_CHANGE.md](docs/WHAT_YOU_CAN_CHANGE.md) classifies
 *everything* in the firmware as data-edit / code-patch / runtime-config / not-editable, and
@@ -114,20 +128,21 @@ recovery section) **before** you do.
 ## How the firmware is structured (the short version)
 
 The `.bin` is a container of named sections (`ui_nu` = Main MCU / UI, `dsp_nu` = DSP, `gps_nu` =
-Sub/GPS, `sound_dbnu` = audio, `LRDB` = camera DB, plus R8/R4 `STxx` images). Each payload is
-obfuscated with a **2-bit-plane transpose across every 4-byte group, then a per-section subtract
+Sub/GPS, `sound_dbnu` = audio, `LRDB` = camera DB, plus alternate images). The supported
+legacy R7 payloads are obfuscated with a **2-bit-plane transpose across every 4-byte group, then a per-section subtract
 key** — a pure bijection, *not* encryption. Decoding the three code sections yields **ARM
 Cortex-M** images. Full details, keys, and memory maps: **[docs/FORMAT.md](docs/FORMAT.md)**.
 
-There is **no whole-image checksum** on the code sections, and the R7's bootloader Recovery Mode
+For the documented R7 images, there is **no whole-image checksum** on the code sections, and the R7's bootloader Recovery Mode
 can restore a bad flash — which is what makes safe experimentation practical.
 
 ## Firmware versions
 
-The decode/encode math is version-independent, but tools that target a *feature* hard-code offsets
+The legacy R7 decode/encode transform is independent of feature offsets, but tools that
+target a *feature* hard-code offsets
 found in **`R7_v153.150.127`** (boot logo `0x2d526`, self-test string `0x2268`, scan tiles
-`0x29b6e`, …). On a different firmware version these move. `r7_unpack.py parse` still works on any
-R-series image; to re-locate feature offsets on another version, follow
+`0x29b6e`, …). On a different firmware version these move. `r7_unpack.py parse` supports the documented
+R7/R4W/R8W container framing; to re-locate feature offsets on another version, follow
 [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md). PRs adding a version→offsets table are
 very welcome.
 
@@ -135,7 +150,7 @@ very welcome.
 
 ```
 tools/     the CLIs — editing: r7_patch r7_gfx r7_gpsdb r7_scan r7_bands r7_sound;
-           container: r7_unpack; analysis: r7_alertsim r7_lzss r7_iplink
+           container: r7_unpack rseries; analysis: r7_alertsim r7_lzss r7_iplink
 docs/      guides: FORMAT, SETUP, FLASHING; per-capability (TEXT, GRAPHICS, GPS_DATABASE,
            SCAN_ANIMATION, BAND_FILTERING, SOUND); FIRMWARE_MAP + WHAT_YOU_CAN_CHANGE;
            REVERSE_ENGINEERING

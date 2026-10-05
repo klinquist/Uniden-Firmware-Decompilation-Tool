@@ -21,7 +21,7 @@ UI_KEY = 182
 RAMP = [0, 90, 180, 255]   # 2bpp shade -> gray
 
 def ui_region(buf):
-    for f in parse(buf):
+    for f in parse(buf, require_model=7):
         if f['name'] == 'ui_nu':
             return f['offset'], f['length']
     raise SystemExit("ui_nu not found")

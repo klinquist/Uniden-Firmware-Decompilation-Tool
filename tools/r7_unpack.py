@@ -12,7 +12,8 @@ were recovered by maximizing ARM Thumb-2 disassembly validity:
 
     ui_nu  -> 182 (0xB6)   dsp_nu -> 184 (0xB8)   gps_nu -> 183 (0xB7)
 
-All three decode to ARM Cortex-M images, base 0x00000000, little-endian.
+These keys are verified for R7 only. R4W/R8W code remains opaque;
+container parsing and raw extraction are supported for those models.
 encode_old_model() is the verified byte-exact inverse (decode->encode == orig).
 
 Usage:
@@ -22,7 +23,7 @@ Usage:
 """
 import sys, os, struct, math, collections
 
-SOUND_KEY = 255
+SOUND_KEY = 225  # R7 ISD3800 payload and sound version footers (see r7_sound.py)
 GPSDB_KEYS = {'LRDB': 210, 'DFDB': 194, 'IRDB': 226}   # US / NZ / IL
 CODE_KEYS  = {'ui_nu': 182, 'dsp_nu': 184, 'gps_nu': 183}
 
@@ -63,105 +64,211 @@ def encode_old_model(key, data):
         out[i:i+4] = bytes(d)
     return bytes(out)
 
-def parse(buf):
-    """Return list of dicts: name, offset, length, term, version, key."""
+MODEL_NAMES = {7: 'R7', 24: 'R4W', 28: 'R8W'}
+
+class FirmwareFormatError(ValueError):
+    """Invalid or unsupported container framing."""
+
+
+def parse(buf, require_model=None):
+    """Parse sections without guessing a decoder for an unknown model.
+
+    Existing name/offset/length/term/version/key fields remain compatible with
+    the R7 tools. Additional fields describe the model, framing and encoding.
+    """
     files = []
-    def u32(p): return struct.unpack_from('<I', buf, p)[0]
+
+    def need(off, length):
+        if off < 0 or length < 0 or off + length > len(buf):
+            raise FirmwareFormatError(f'truncated section at 0x{off:x}: need {length} bytes')
+
+    def u32(off):
+        need(off, 4)
+        return struct.unpack_from('<I', buf, off)[0]
+
+    def text(off, length):
+        need(off, length)
+        try:
+            return bytes(buf[off:off + length]).decode('ascii')
+        except UnicodeDecodeError as exc:
+            raise FirmwareFormatError(f'invalid tag at 0x{off:x}') from exc
+
+    def expect(off, tag):
+        if text(off, len(tag)) != tag:
+            raise FirmwareFormatError(f'expected {tag} at 0x{off:x}')
+
+    def version(off):
+        need(off, 2)
+        mv = struct.unpack_from('<H', buf, off)[0]
+        return mv >> 10, mv & 0x3ff
+
+    def append(name, off, length, term, ver, key=None, encoding='opaque', **extra):
+        need(off, length)
+        files.append(dict(name=name, offset=off, length=length, term=term,
+                          version=ver, key=key, encoding=encoding, **extra))
 
     first = u32(0)
-    ui_nu_len  = alter_length(first & 0xFFFFFF)
-    has_sound  = (first >> 24) & 1
-    dsp_nu_len = alter_length(u32(4))
-    gps_nu_len = alter_length(u32(8))
+    lengths = [first & 0xffffff, u32(4), u32(8)]
     pos = 12
     sound_len = 0
-    if has_sound:
+    if (first >> 24) & 1:
+        expect(pos, 'SNDD')
         sound_len = u32(pos + 8)
         pos += 12
-
-    def take(length, name):
-        nonlocal pos
+    model = None
+    for name, declared, term in zip(CODE_KEYS, lengths, ('DRSWMAI', 'DRSWDSP', 'DRSWSUB')):
+        if not declared:
+            continue
+        length = alter_length(declared)
         off = pos
         pos += length
-        mv = struct.unpack_from('<h', buf, pos)[0]
-        version = mv & 0x3FF
-        term = buf[pos+2:pos+9].decode('latin1', 'replace')
+        section_model, ver = version(pos)
+        expect(pos + 2, term)
+        if model is None:
+            model = section_model
+            if require_model is not None and model != require_model:
+                raise FirmwareFormatError(
+                    f'this editor requires {MODEL_NAMES.get(require_model, require_model)}; '
+                    f'input is {MODEL_NAMES.get(model, model)}. Use rseries.py for inspection.')
+        elif section_model != model:
+            raise FirmwareFormatError(f'inconsistent model in {name} trailer')
+        key = CODE_KEYS[name] if model == 7 else None
+        append(name, off, length, term, ver, key,
+               'transpose' if key is not None else 'opaque',
+               declared_length=declared, model_id=model,
+               model=MODEL_NAMES.get(model, f'unknown-{model}'))
         pos += 9
-        files.append(dict(name=name, offset=off, length=length, term=term,
-                          version=version, key=CODE_KEYS[name]))
-
-    if ui_nu_len:  take(ui_nu_len,  'ui_nu')
-    if dsp_nu_len: take(dsp_nu_len, 'dsp_nu')
-    if gps_nu_len: take(gps_nu_len, 'gps_nu')
+    if model is None:
+        raise FirmwareFormatError('no main/DSP/GPS code sections; not a combined firmware image')
     if sound_len:
+        if sound_len < 12:
+            raise FirmwareFormatError('sound length is smaller than its footer')
         off = pos
-        pos += sound_len          # payload (sound_len-12) + 12B version trailer
-        term = buf[pos:pos+7].decode('latin1', 'replace'); pos += 7
-        files.append(dict(name='sound_dbnu', offset=off, length=sound_len-12,
-                          term=term, version=0, key=SOUND_KEY))
-
-    while pos < len(buf) - 12:
-        tag = buf[pos:pos+4].decode('latin1', 'replace')
-        clen = u32(pos+8); cur = pos + 12
-        if tag in ('GPSD', 'GASD'):
-            body = cur; end = cur + (clen - 12)
-            ident = buf[end+8:end+12].decode('latin1', 'replace')
-            files.append(dict(name=f'{tag}:{ident}', offset=body, length=clen-12,
-                              term=ident, version=0, key=GPSDB_KEYS.get(ident, 0)))
-            pos = end + 12 + (2 if tag == 'GASD' else 0) + 7
-        elif tag in ('BLES','KEYS','LSRS','STUI','STDS','STGP','N2UI','N2DS','N3DS','N2GP','N3GP'):
+        length = sound_len - 12
+        need(off + length, 12)
+        ver = int.from_bytes(decode_old_model(SOUND_KEY, buf[off + length:off + length + 4]), 'little') & 0x3ff
+        pos += sound_len
+        expect(pos, 'DRSWSDB')
+        append('sound_dbnu', off, length, 'DRSWSDB', ver, SOUND_KEY, 'transpose',
+               declared_length=sound_len, model_id=model)
+        pos += 7
+    while pos < len(buf):
+        tag = text(pos, 4)
+        declared = u32(pos + 8)
+        cur = pos + 12
+        if tag == 'NMGF':
+            need(pos, 12)
+            if cur != len(buf):
+                raise FirmwareFormatError('unexpected bytes after NMGF footer')
+            append('NMGF(footer)', pos, 12, '', declared, encoding='plaintext', model_id=model)
+            pos = cur
+        elif tag in ('GPSD', 'GASD'):
+            if declared < 12:
+                raise FirmwareFormatError(f'{tag} length is smaller than its footer')
+            length = declared - 12
+            end = cur + length
+            ident = text(end + 8, 4)
+            key = GPSDB_KEYS.get(ident)
+            if ident not in GPSDB_KEYS and ident not in ('AEUS', 'AENZ', 'AEIL', 'AEEU'):
+                raise FirmwareFormatError(f'unknown GPS database format {ident}')
+            raw_count = bytes(buf[end:end + 4])
+            count = int.from_bytes(decode_old_model(key, raw_count) if key is not None else raw_count, 'little')
+            date = u32(end + 4)
+            term = 'DRSWGDB' if tag == 'GPSD' else 'DRSWGAE'
+            pos = end + 12 + (2 if tag == 'GASD' else 0)
+            expect(pos, term)
+            append(f'{tag}:{ident}', cur, length, ident, date, key,
+                   'transpose' if key is not None else 'aes128',
+                   declared_length=declared, poi_count=count, country={'LRDB': 'US', 'DFDB': 'NZ', 'IRDB': 'IL'}.get(ident, ident[-2:]), model_id=model)
+            pos += 7
+        elif tag in ('BLES', 'KEYS', 'LSRS', 'STUI', 'STDS', 'STGP', 'N2UI', 'N2DS', 'N3DS', 'N2GP', 'N3GP'):
             mod = 1024 if tag == 'BLES' else 512
-            length = (clen // mod + 1) * mod
-            off = cur; pos = cur + length
-            term = buf[pos+2:pos+9].decode('latin1', 'replace'); pos += 9
-            files.append(dict(name=tag, offset=off, length=length, term=term, version=0, key=None))
+            length = (declared // mod + 1) * mod
+            end = cur + length
+            component_model, ver = version(end)
+            term = f'DRSW{tag[:3]}'
+            expect(end + 2, term)
+            encoding = 'esp-image' if tag == 'BLES' and buf[cur:cur + 1] == b'\xe9' else 'opaque'
+            append(tag, cur, length, term, ver, encoding=encoding,
+                   declared_length=declared, model_id=component_model)
+            pos = end + 9
         elif tag in ('STSD', 'SUSD'):
-            off = cur; pos = cur + (clen - 12) + (2 if tag == 'SUSD' else 0) + 7
-            files.append(dict(name=tag, offset=off, length=clen-12, term='', version=0, key=SOUND_KEY))
-        elif tag == 'NMGF':
-            files.append(dict(name='NMGF(footer)', offset=pos, length=12, term='', version=u32(pos+8), key=None))
-            break
+            if declared < 12:
+                raise FirmwareFormatError(f'{tag} length is smaller than its footer')
+            length = declared - 12
+            end = cur + length
+            need(end, 12)
+            # The footer's first word uses the legacy transform. This does not
+            # establish the encoding or codec of the sound payload itself.
+            ver = int.from_bytes(decode_old_model(SOUND_KEY, buf[end:end + 4]), 'little') & 0x3ff
+            term = f'DRSW{tag[:3]}'
+            pos = end + 12 + (2 if tag == 'SUSD' else 0)
+            expect(pos, term)
+            key = None  # STSD/SUSD payload codec and key are not established
+            append(tag, cur, length, term, ver, key,
+                   'transpose' if key is not None else 'opaque',
+                   declared_length=declared, model_id=model)
+            pos += 7
         else:
-            step = (clen if tag[2:4] == 'SD' else alter_length(clen)) + 9
-            pos = cur + step - 12
+            raise FirmwareFormatError(f'unsupported section {tag!r} at 0x{pos:x}')
+    if model in (24, 28) and files[-1]['name'] != 'NMGF(footer)':
+        raise FirmwareFormatError('missing NMGF footer for wireless-model container')
     return files
 
-def main():
-    if len(sys.argv) < 3:
-        print(__doc__); sys.exit(1)
-    cmd = sys.argv[1]
-    if cmd == 'encode':
-        data = open(sys.argv[2], 'rb').read()
-        key = CODE_KEYS[sys.argv[3]]
-        open(sys.argv[4], 'wb').write(encode_old_model(key, data))
-        print(f"encoded {len(data)} bytes with key {key} -> {sys.argv[4]}")
-        return
-    buf = open(sys.argv[2], 'rb').read()
-    files = parse(buf)
-    if cmd == 'parse':
-        print(f"file: {sys.argv[2]}  size={len(buf)} (0x{len(buf):x})\n")
-        print(f"{'section':16s} {'offset':>10s} {'length':>10s} {'term':10s} {'ver':>4s} {'key':>4s}  entropy")
-        for f in files:
-            e = entropy(buf[f['offset']:f['offset']+f['length']])
-            k = '' if f['key'] is None else str(f['key'])
-            print(f"{f['name']:16s} 0x{f['offset']:08x} {f['length']:10d} {f['term']:10s} {f['version']:4d} {k:>4s}  {e:.3f}")
-    elif cmd == 'extract':
-        out = sys.argv[3] if len(sys.argv) > 3 else 'decoded'
-        os.makedirs(out, exist_ok=True)
-        for f in files:
-            payload = buf[f['offset']:f['offset']+f['length']]
-            key = f['key']
-            name = f['name']
-            if key is not None and name in CODE_KEYS:
-                payload = decode_old_model(key, payload)
-                fn = f"{name}.bin"
-            elif key is not None and key != 0:
-                payload = decode_old_model(key, payload)
-                fn = f"{name.replace(':','_')}.dec.bin"
+
+def main(argv=None):
+    import argparse
+    import json
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest='command', required=True)
+    inspect = sub.add_parser('parse', help='inspect model, sections, versions and encodings')
+    inspect.add_argument('firmware')
+    inspect.add_argument('--json', action='store_true')
+    extract = sub.add_parser('extract', help='extract supported decodings; preserve opaque payloads')
+    extract.add_argument('firmware')
+    extract.add_argument('out_dir', nargs='?', default='decoded')
+    extract.add_argument('--raw', action='store_true', help='skip legacy decodings')
+    encode = sub.add_parser('encode', help='encode a standalone R7 code payload')
+    encode.add_argument('section_file')
+    encode.add_argument('section', choices=CODE_KEYS)
+    encode.add_argument('output')
+    args = parser.parse_args(argv)
+    try:
+        if args.command == 'encode':
+            data = open(args.section_file, 'rb').read()
+            if len(data) % 4:
+                raise FirmwareFormatError('encoding requires a multiple of four bytes')
+            encoded = encode_old_model(CODE_KEYS[args.section], data)
+            with open(args.output, 'wb') as fh:
+                fh.write(encoded)
+            print(f'encoded {len(data)} bytes -> {args.output}')
+            return
+        buf = open(args.firmware, 'rb').read()
+        files = parse(buf)
+        if args.command == 'parse':
+            if args.json:
+                print(json.dumps(files, indent=2))
             else:
-                fn = f"{name.replace(':','_')}.raw.bin"
-            open(os.path.join(out, fn), 'wb').write(payload)
-            print(f"  wrote {out}/{fn}  ({len(payload)} bytes)")
+                print(f'file: {args.firmware}  model={files[0]["model"]}  size={len(buf)}')
+                print(f'{"section":16s} {"offset":>10s} {"length":>10s} {"version":>10s}  encoding')
+                for f in files:
+                    print(f'{f["name"]:16s} 0x{f["offset"]:08x} {f["length"]:10d} {f["version"]:10d}  {f["encoding"]}')
+        else:
+            os.makedirs(args.out_dir, exist_ok=True)
+            for f in files:
+                payload = buf[f['offset']:f['offset'] + f['length']]
+                decoded = f['key'] is not None and not args.raw
+                if decoded:
+                    payload = decode_old_model(f['key'], payload)
+                suffix = '.bin' if decoded and f['name'] in CODE_KEYS else ('.dec.bin' if decoded else '.raw.bin')
+                filename = f['name'].replace(':', '_') + suffix
+                path = os.path.join(args.out_dir, filename)
+                with open(path, 'wb') as fh:
+                    fh.write(payload)
+                print(f'wrote {path} ({len(payload)} bytes; {f["encoding"]})')
+    except (OSError, ValueError) as exc:
+        parser.exit(2, f'error: {exc}\n')
+
 
 if __name__ == '__main__':
     main()

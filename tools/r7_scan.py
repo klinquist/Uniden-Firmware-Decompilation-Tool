@@ -31,7 +31,7 @@ DATA_LMA, DATA_LEN = 0x2f7ac, 0x514
 FD_OFF = 0x298             # framedata offset within decompressed .data
 
 def ui_span(buf):
-    for f in parse(buf):
+    for f in parse(buf, require_model=7):
         if f['name'] == 'ui_nu':
             return f['offset'], f['length']
     raise SystemExit("ui_nu not found")

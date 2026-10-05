@@ -23,7 +23,7 @@ KEY = 210  # US / LRDB
 
 def locate_gpsdb(buf):
     """Return (body_off, body_len, len_field_off, tail_off) for the GPSD/LRDB section."""
-    for f in parse(buf):
+    for f in parse(buf, require_model=7):
         if f['name'].startswith('GPSD') and f['term'] == 'LRDB':
             body_off = f['offset']
             body_len = f['length']
