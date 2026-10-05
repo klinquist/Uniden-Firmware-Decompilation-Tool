@@ -8,7 +8,7 @@ How the format was cracked, and how to re-locate feature offsets on a **differen
 or extend the toolkit. The specific offsets in the tools are for `R7_v153.150.127`; the *methods*
 below are version-independent.
 
-For R4W/R8W, begin with [decoding research](DECODING_RESEARCH.md). The
+For R4W/R8W, begin with [firmware findings](FIRMWARE_FINDINGS.md). The
 controller payloads are opaque; importing them as decoded ARM code will not
 make the R7 disassembly workflow applicable. The extracted ESP32-C3 segments
 are already readable machine code and retain their real load addresses.

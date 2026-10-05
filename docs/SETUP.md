@@ -15,8 +15,8 @@ python3 tools/rseries_probe.py /path/to/R8W_v142.113.127_db260702.bin
 ```
 
 See [R4W/R8W support](R4W_R8W.md) for the extraction manifest and verified
-wireless image layout. [Decoding research](DECODING_RESEARCH.md) distinguishes
-offline decoding experiments from a future read-only USB investigation.
+wireless image layout. [Firmware findings](FIRMWARE_FINDINGS.md) records the
+completed offline checks and current decoding limits.
 
 ## R7 editing requirements
 

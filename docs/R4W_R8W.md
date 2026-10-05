@@ -9,7 +9,7 @@ inspection, and byte-exact reproduction** for these stock updates:
 The main, DSP and GPS code payloads remain opaque. Applying the R7
 transpose/subtract keys to these images does not produce valid Cortex-M vector
 tables. R7 editing tools therefore reject these models before writing output.
-This is a first stage of support, not a complete code decompiler or a verified
+These operations do not include controller-code decompilation or a verified
 custom-firmware flashing workflow.
 
 ## Usage
@@ -87,10 +87,10 @@ headers indicate no appended SHA256 digest; the toolkit also handles images
 that do append one. These build timestamps describe the wireless component,
 not the date of the entire update package.
 
-For further experiments and updater transfer-path findings, see
-[decoding research](DECODING_RESEARCH.md).
+For completed offline checks and container-related updater findings, see
+[firmware findings](FIRMWARE_FINDINGS.md).
 
-## Limits and reverse-engineering targets
+## Current support limits
 
 - Main/DSP/GPS and alternate-DSP decoding: repeated 16-byte blocks suggest a
   block-based encoding/encryption, but this observation does not prove an AES
@@ -103,21 +103,11 @@ For further experiments and updater transfer-path findings, see
   clean-speech decoder is established for these `STSD` payloads.
 - Hardware dispatch: updater v2.26 selects the primary or `N2DS` DSP component
   by matching the returned MCU ID to its Nuv/Nuv2 identifiers. The hardware
-  identity of a particular detector needs a device reply.
+  identity of a particular detector is not encoded in these update files.
 - Hidden buttons and diagnostics: no factory/service key combination has been
-  verified from these opaque controller images. The stock release notes do
-  document an **Installer Test Mode** for optional laser hardware; that is not
-  evidence of an undocumented radar calibration menu.
-- Parameters absent from the device menu: locating and changing a filtering
-  constant, calibration value or auto-lockout radius requires decoded code or
-  a confirmed settings protocol. No patch offsets for such values are claimed.
-
-The Windows updater v2.26 was inspected locally during the investigation. Its
-model-specific settings classes include `UserSettingR4W/v127` and
-`UserSettingR8W/v142`, with K/Ka block mode, strength and frequency serialization.
-Those are useful future settings-protocol targets, but updater field names
-alone do not prove a setting is hidden, writable on hardware, or safe to change.
-No updater executable, disassembly or extracted asset is distributed here.
+  verified from these opaque controller images.
+- Parameters absent from the device menu: no verified patch offsets or support
+  for changing such values are included.
 
 ## Validation
 

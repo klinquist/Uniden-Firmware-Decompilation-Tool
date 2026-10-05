@@ -20,7 +20,7 @@ images and validates the ESP32-C3 wireless images in R4W/R8W updates.
 **R-series tool names describe the toolkit, not universal editing support.**
 The editors reject R4W/R8W before modifying output. R7 keys and feature offsets
 must not be applied to wireless models. Start with [R4W/R8W support](docs/R4W_R8W.md)
-and [decoding research](docs/DECODING_RESEARCH.md) for those models.
+and [firmware findings](docs/FIRMWARE_FINDINGS.md) for those models.
 
 ## Quick start: R7, R4W or R8W
 
@@ -51,7 +51,7 @@ imports remain compatibility aliases with the same model restrictions.
 |---|---|---|
 | Inspect, extract and reproduce updates | `rseries.py` | R7 / R4W / R8W: [format](docs/FORMAT.md), [wireless models](docs/R4W_R8W.md) |
 | Parse containers / legacy transforms | `rseries_unpack.py` | Container: all three; decoding: supported legacy sections |
-| Compare block patterns and decoding hypotheses | `rseries_probe.py` | All three: [research](docs/DECODING_RESEARCH.md) |
+| Compare block patterns and decoding hypotheses | `rseries_probe.py` | All three: [findings](docs/FIRMWARE_FINDINGS.md) |
 | Menu / display text | `rseries_patch.py` | R7: [text](docs/TEXT.md) |
 | Boot logo and bitmaps | `rseries_gfx.py` | R7: [graphics](docs/GRAPHICS.md) |
 | Camera database | `rseries_gpsdb.py` | R7 legacy DB: [GPS database](docs/GPS_DATABASE.md) |
@@ -93,7 +93,8 @@ UNIDEN_FIRMWARE_DIR=/path/to/firmware python3 -m unittest discover -s tests -v
 
 CI uses synthetic fixtures and does not redistribute firmware. Contributions
 should state model, version and evidence; distinguish validated decoders from
-hypotheses. See [decoding research](docs/DECODING_RESEARCH.md) for remaining work.
+hypotheses. See [firmware findings](docs/FIRMWARE_FINDINGS.md) for the completed
+offline checks and their limits.
 
 ## Repository layout
 

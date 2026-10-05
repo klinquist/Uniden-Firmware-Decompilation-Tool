@@ -15,7 +15,7 @@ validate and export the ESP32-C3 segments, and reproduce an unchanged update.
 The controller-code and AES database decoders are unresolved, so the R7 text,
 graphics, camera and RF editors below reject those models. No hidden key
 combination or non-menu firmware patch is verified for either wireless model.
-See [the measured maps](R4W_R8W.md) and [decoder experiments / USB targets](DECODING_RESEARCH.md).
+See [the measured maps](R4W_R8W.md) and [offline findings](FIRMWARE_FINDINGS.md).
 
 ## The four kinds of change
 

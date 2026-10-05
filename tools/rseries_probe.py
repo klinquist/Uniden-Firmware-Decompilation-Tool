@@ -2,7 +2,7 @@
 """Read-only block statistics and conservative Cortex-M decoding probes.
 
 Reports observations, not a cipher identification or a verified decoder.
-No firmware output is produced. See docs/DECODING_RESEARCH.md.
+No firmware output is produced. See docs/FIRMWARE_FINDINGS.md.
 """
 import argparse
 import collections
