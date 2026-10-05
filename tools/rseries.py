@@ -11,7 +11,7 @@ import re
 import struct
 from pathlib import Path
 
-from r7_unpack import FirmwareFormatError, decode_old_model, encode_old_model, parse
+from rseries_unpack import FirmwareFormatError, decode_old_model, encode_old_model, parse
 
 
 def sha256(data):

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from r7_unpack import FirmwareFormatError, decode_old_model, encode_old_model, parse
+from rseries_unpack import FirmwareFormatError, decode_old_model, encode_old_model, parse
 from rseries import esp_image_info, extract_image, inspect_image, repack_image
 
 
@@ -94,11 +94,11 @@ class ContainerTests(unittest.TestCase):
             self.assertEqual(encode_old_model(key, decode_old_model(key, data)), data)
 
     def test_r7_editors_reject_other_models(self):
-        import r7_patch
-        import r7_bands
+        import rseries_patch
+        import rseries_bands
         for model in (24, 28):
             for call in (lambda b: parse(b, require_model=7),
-                         lambda b: r7_patch.get_section(b, 'ui_nu'), r7_bands.get_dsp):
+                         lambda b: rseries_patch.get_section(b, 'ui_nu'), rseries_bands.get_dsp):
                 with self.assertRaisesRegex(FirmwareFormatError, 'requires R7'):
                     call(container(model))
 

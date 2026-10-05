@@ -43,7 +43,7 @@ accept edited components; integrity/signature rules for custom W-model firmware
 have not been established. Separately exported decoded/ESP segment files are
 analysis artifacts and are not repack inputs.
 
-The old `r7_unpack.py parse` and `extract` commands also accept these containers.
+The `rseries_unpack.py parse` and `extract` commands also accept these containers.
 They preserve unsupported components as `.raw.bin`, and `parse --json` exposes
 the added metadata. Use `rseries.py` for complete framing preservation and ESP
 validation.
@@ -62,7 +62,7 @@ the two input files; they are not guesses from their filenames.
 | Camera DB (`GPSD:AEUS`) | `0x063a33` / 208896 | `0x058833` / 208896 | 20260702 / 20260702 | AES-128 identifier; ciphertext preserved |
 | Sound (`STSD`) | `0x096a52` / 2211828 | `0x08b852` / 2223092 | 107 / 108 | Payload codec/key unresolved |
 | Laser interface (`LSRS`) | `0x2b2a65` / 48128 | `0x2aa465` / 48128 | 123 / 123 | Opaque |
-| Alternate DSP (`N2DS`) | `0x2be67a` / 119296 | `0x2b607a` / 88064 | 113 / 128 | Opaque; hardware selection unresolved |
+| Alternate DSP (`N2DS`) | `0x2be67a` / 119296 | `0x2b607a` / 88064 | 113 / 128 | Opaque; selected by MCU ID |
 | Wireless (`BLES`) | `0x2db88f` / 1162240 | `0x2cb88f` / 1162240 | 124 / 124 | Valid ESP32-C3 image |
 | Merge footer (`NMGF`) | `0x3f7498` / 12 | `0x3e7498` / 12 | Merge value 109 / 109 | Plain framing |
 
@@ -75,7 +75,7 @@ or code is interchangeable between models.
 
 The sound footer's version word uses the legacy transform with key **225**:
 it produces little-endian 107/108. This does **not** identify the sound payload's
-codec or decoding key. The same key is used by the existing `r7_sound.py` for
+codec or decoding key. The same key is used by the existing `rseries_sound.py` for
 R7 ISD3800 payloads; the unpacker's former key 255 was inconsistent with that
 tool and is corrected for `sound_dbnu`.
 
@@ -86,6 +86,9 @@ are **Feb 5 2026 18:29:01** for R8W and **Feb 4 2026 21:52:13** for R4W. Their
 headers indicate no appended SHA256 digest; the toolkit also handles images
 that do append one. These build timestamps describe the wireless component,
 not the date of the entire update package.
+
+For further experiments and updater transfer-path findings, see
+[decoding research](DECODING_RESEARCH.md).
 
 ## Limits and reverse-engineering targets
 
@@ -98,8 +101,9 @@ not the date of the entire update package.
   old `LRDB` camera editor is not applicable.
 - Sound: its footer is readable, but neither R7 sound extraction nor a
   clean-speech decoder is established for these `STSD` payloads.
-- Hardware dispatch: the choice between `dsp_nu` and `N2DS` needs confirmation
-  from the updater/device or main-controller code.
+- Hardware dispatch: updater v2.26 selects the primary or `N2DS` DSP component
+  by matching the returned MCU ID to its Nuv/Nuv2 identifiers. The hardware
+  identity of a particular detector needs a device reply.
 - Hidden buttons and diagnostics: no factory/service key combination has been
   verified from these opaque controller images. The stock release notes do
   document an **Installer Test Mode** for optional laser hardware; that is not
